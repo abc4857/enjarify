@@ -200,6 +200,9 @@ class IRWriter:
         self.target_pred_counts = collections.defaultdict(int)
 
         self.numregs = None # will be set once registers are allocated (see registers.py)
+        
+        self.pos_map = None # map between ir position and dalvik position
+        self.regmap = None # map between dalvik register and position
 
     def calcInitialArgs(self, nregs, scalar_ptypes):
         self.initial_args = args = []
@@ -221,15 +224,20 @@ class IRWriter:
 
     def flatten(self):
         instructions = []
+        self.pos_map = []
+        last_pos = 0
         for pos in sorted(self.iblocks):
             if pos in self.exception_redirects:
                 # check if we can put handler pop in front of block
                 if instructions and not instructions[-1].fallsthrough():
                     instructions.append(self.exception_redirects.pop(pos))
                     instructions.append(ir.Pop())
+                    self.pos_map += [last_pos] * 2 # Is this the right block?
                 # if not, leave it in dict to be redirected later
             # now add instructions for actual block
             instructions += self.iblocks[pos].instructions
+            self.pos_map += [pos] * (len(self.iblocks[pos].instructions))
+            last_pos = pos
 
         # exception handler pops that couldn't be placed inline
         # in this case, just put them at the end with a goto back to the handler
@@ -237,17 +245,25 @@ class IRWriter:
             instructions.append(self.exception_redirects[target])
             instructions.append(ir.Pop())
             instructions.append(ir.Goto(target))
+            self.pos_map += [last_pos] * 3 # Is this the correct position for these?
 
         self.flat_instructions = instructions
         self.iblocks = self.exception_redirects = None
+        assert len(self.pos_map) == len(self.flat_instructions)
 
     def replaceInstrs(self, replace):
+        assert len(self.pos_map) == len(self.flat_instructions)
         if replace:
             instructions = []
-            for instr in self.flat_instructions:
-                instructions.extend(replace.get(instr, [instr]))
+            pos_map = []
+            for instr, dalvik_pos in zip(self.flat_instructions, self.pos_map):
+                new_instrs = replace.get(instr, [instr])
+                instructions.extend(new_instrs)
+                pos_map += [dalvik_pos] * len(new_instrs)
             self.flat_instructions = instructions
+            self.pos_map = pos_map
             assert len(set(instructions)) == len(instructions)
+            assert len(self.pos_map) == len(self.flat_instructions)
 
     def calcUpperBound(self):
         # Get an uppper bound on the size of the bytecode

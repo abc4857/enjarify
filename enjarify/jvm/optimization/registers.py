@@ -160,8 +160,8 @@ def removeUnusedRegisters(irdata):
 # For simplicity, parameter registers are preserved as is
 def simpleAllocateRegisters(irdata):
     instrs = irdata.flat_instructions
-    regmap = {v:i for i,v in enumerate(irdata.initial_args)}
-    nextreg = len(irdata.initial_args)
+    regmap = {v: i for i,v in enumerate(irdata.initial_args) if v != None}
+    nextreg = len(regmap)
 
     for instr in instrs:
         if isinstance(instr, ir.RegAccess):
@@ -172,6 +172,7 @@ def simpleAllocateRegisters(irdata):
                     nextreg += 1
             instr.calcBytecode(regmap[instr.key])
     irdata.numregs = nextreg
+    irdata.regmap = {k:v for k,v in regmap.items()} # keep track of original registers for debug info
 
 # Sort registers by number of uses so that more frequently used registers will
 # end up in slots 0-3 or 4-255 and benefit from the shorter instruction forms
@@ -229,3 +230,4 @@ def sortAllocateRegisters(irdata):
     for instr in instrs:
         if instr.bytecode is None and isinstance(instr, ir.RegAccess):
             instr.calcBytecode(regmap[instr.key])
+    irdata.regmap = regmap

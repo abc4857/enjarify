@@ -44,19 +44,33 @@ def writeField(pool, stream, field):
     else:
         stream.u16(0) # no attributes
 
-def writeMethod(pool, stream, method, code_attr_data):
+def writeMethod(pool, stream, method, code_attr_data, opts):
     stream.u16(method.access & flags.METHOD_FLAGS)
     stream.u16(pool.utf8(method.id.name))
     stream.u16(pool.utf8(method.id.desc))
-
+    
+    code_attr = 0
+    param_attr = 0
     if code_attr_data is not None:
+        code_attr = 1
+    if opts.translate_debug and method.code != None and method.code.debug_info != None and len(method.code.debug_info.parameter_names):
+        param_attr = 1
+    stream.u16(code_attr + param_attr)
+    if code_attr:
         code_attr_data = code_attr_data.toBytes()
-        stream.u16(1)
         stream.u16(pool.utf8(b"Code"))
         stream.u32(len(code_attr_data))
         stream.write(code_attr_data)
-    else:
-        stream.u16(0) # no attributes
+    if param_attr:
+        stream.u16(pool.utf8(b"MethodParameters"))
+        stream.u32(1 + len(method.code.debug_info.parameter_names) * 4)
+        stream.u8(len(method.code.debug_info.parameter_names))
+        for name in method.code.debug_info.parameter_names:
+            if name != None:
+                stream.u16(pool.utf8(name))
+            else:
+                stream.u16(0)
+            stream.u16(0) # dex doesn't have access_flags
 
 def writeMethods(pool, stream, methods, opts):
     code_irs = []
@@ -66,7 +80,7 @@ def writeMethods(pool, stream, methods, opts):
 
     stream.u16(len(methods))
     for method in methods:
-        writeMethod(pool, stream, method, code_attrs.get(method))
+        writeMethod(pool, stream, method, code_attrs.get(method), opts)
 
 def classFileAfterPool(cls, opts):
     stream = Writer()
@@ -115,8 +129,12 @@ def toClassFile(cls, opts):
     try:
         pool, rest_stream = classFileAfterPool(cls, opts=opts)
     except error.ClassfileLimitExceeded:
-        # print('Retrying {} with optimization enabled'.format(cls.name))
-        pool, rest_stream = classFileAfterPool(cls, opts=options.ALL)
+        print('Retrying {} with optimization enabled'.format(cls.name))
+        newopts = options.ALL
+        if opts.translate_debug:
+            newopts.translate_debug = True
+            newopts.sort_registers = False # breaks translate debug for some reason
+        pool, rest_stream = classFileAfterPool(cls, opts=newopts)
 
     # write constant pool
     pool.write(stream)

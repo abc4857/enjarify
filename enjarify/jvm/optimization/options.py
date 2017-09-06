@@ -15,7 +15,7 @@
 class Options:
     def __init__(self, inline_consts=False, prune_store_loads=False,
         copy_propagation=False, remove_unused_regs=False, dup2ize=False,
-        sort_registers=False, split_pool=False, delay_consts=False):
+        sort_registers=False, split_pool=False, delay_consts=False, translate_debug=False):
         self.inline_consts = inline_consts
         self.prune_store_loads = prune_store_loads
         self.copy_propagation = copy_propagation
@@ -24,6 +24,7 @@ class Options:
         self.sort_registers = sort_registers
         self.split_pool = split_pool
         self.delay_consts = delay_consts
+        self.translate_debug = translate_debug
 
 NONE = Options()
 # Options which make the generated code more readable for humans

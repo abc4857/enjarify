@@ -13,6 +13,7 @@
 # limitations under the License.
 from .byteio import Reader
 from .dalvik import parseBytecode
+from .debug import parseDebugInfo
 from .util import signExtend
 
 NO_INDEX = 0xFFFFFFFF
@@ -136,6 +137,17 @@ class TryItem:
         if size <= 0:
             results.append((b'java/lang/Throwable', stream.uleb128()))
 
+class DebugInfoItem:
+    def __init__(self, dex, offset):
+        stream = dex.stream(offset)
+        self.line_start = stream.uleb128()
+        self.parameters_size = stream.uleb128()
+        self.parameter_name_idxs = [stream.uleb128p1() for _ in range(self.parameters_size)]
+        self.parameter_names = []
+        for idx in self.parameter_name_idxs:
+            self.parameter_names.append(dex.string(idx))
+        self.bytecode = parseDebugInfo(dex, stream)
+
 class CodeItem:
     def __init__(self, dex, offset):
         stream = dex.stream(offset)
@@ -143,7 +155,7 @@ class CodeItem:
         ins_size = stream.u16()
         outs_size = stream.u16()
         tries_size = stream.u16()
-        debug_off = stream.u32()
+        debug_info_off = stream.u32()
         self.insns_size = stream.u32()
         insns_start_pos = stream.pos
         insns = [stream.u16() for _ in range(self.insns_size)]
@@ -157,6 +169,7 @@ class CodeItem:
         catch_addrs = set()
         for tryi in self.tries:
             catch_addrs.update(t[1] for t in tryi.catches)
+        self.debug_info = DebugInfoItem(dex, debug_info_off) if debug_info_off else None
         self.bytecode = parseBytecode(dex, insns_start_pos, insns, catch_addrs)
 
 class Method:
@@ -254,10 +267,11 @@ class DexFile:
     def stream(self, offset): return Reader(self.raw, offset)
 
     def string(self, i):
-        data_off = self.stream(self.string_ids.off + i*4).u32()
-        stream = self.stream(data_off)
-        stream.uleb128() # ignore decoded length
-        return stream.readCStr()
+        if 0 <= i < NO_INDEX:
+            data_off = self.stream(self.string_ids.off + i*4).u32()
+            stream = self.stream(data_off)
+            stream.uleb128() # ignore decoded length
+            return stream.readCStr()
 
     def type(self, i):
         if 0 <= i < NO_INDEX:

@@ -54,6 +54,7 @@ class Reader:
 
     def uleb128(self): return self._leb128()
     def sleb128(self): return self._leb128(signed=True)
+    def uleb128p1(self): return self._leb128() - 1
 
     # Maintain strings in binary encoding instead of attempting to decode them
     # since the output will be using the same encoding anyway

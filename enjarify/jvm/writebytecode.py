@@ -14,7 +14,8 @@
 
 from ..byteio import Writer
 from . import writeir, ir
-from .optimization import registers, jumps, stack, consts
+from .optimization import registers, jumps, stack, consts, options
+from .writedebug import writeDebugAttributes
 
 def getCodeIR(pool, method, opts):
     if method.code is not None:
@@ -77,7 +78,7 @@ def finishCodeAttrs(pool, code_irs, opts):
 def writeCodeAttributeTail(pool, irdata, opts):
     method = irdata.method
     jumps.optimizeJumps(irdata)
-    bytecode, excepts = jumps.createBytecode(irdata, opts)
+    bytecode, excepts, pos_map = jumps.createBytecode(irdata)
 
     stream = Writer()
     # For simplicity, don't bother calculating the actual maximum stack height
@@ -95,5 +96,10 @@ def writeCodeAttributeTail(pool, irdata, opts):
     stream.write(b''.join(excepts))
 
     # attributes
-    stream.u16(0)
+    if opts.translate_debug and method.code.debug_info != None:
+        attr_count, attrs = writeDebugAttributes(pool, irdata, pos_map, len(bytecode), irdata.regmap)
+        stream.u16(attr_count)
+        stream.write(attrs)
+    else:
+        stream.u16(0)
     return stream

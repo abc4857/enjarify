@@ -55,15 +55,24 @@ def optimizeJumps(irdata):
         assert ins.min <= ins.max
         ins.max = ins.min
 
-def createBytecode(irdata, opts):
+def createBytecode(irdata):
+    assert len(irdata.pos_map) == len(irdata.flat_instructions)
     instrs = irdata.flat_instructions
     posd, end_pos = _calcMinimumPositions(instrs)
+    
+    pos_bytecode_map = [] # map each dalvik position -> ir -> to a bytecode offset
+    last_dalvik_pos = -1
 
     bytecode = bytearray()
-    for ins in instrs:
+    for ins, dalvik_pos in zip(instrs, irdata.pos_map):
         if isinstance(ins, (ir.LazyJumpBase, ir.Switch)):
             ins.calcBytecode(posd, irdata.labels)
         bytecode += ins.bytecode
+        if dalvik_pos != last_dalvik_pos:
+            pos_bytecode_map += [len(bytecode)] * (dalvik_pos - last_dalvik_pos)
+            last_dalvik_pos = dalvik_pos
+            #print(str(len(bytecode)))
+    assert len(pos_bytecode_map) == max(irdata.pos_map) + 1
     assert len(bytecode) == end_pos
 
 
@@ -97,4 +106,4 @@ def createBytecode(irdata, opts):
             print('Skipping zero width exception!')
             assert 0
 
-    return bytes(bytecode), packed_excepts
+    return bytes(bytecode), packed_excepts, pos_bytecode_map
